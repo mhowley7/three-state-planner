@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TS Planner">
+<title>Three State · Week Planner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  /* PIN SCREEN */
+  #pin-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #0a0b0d;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 32px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  #pin-screen.hidden { display: none; }
+  .pin-logo { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: #e07b2a; margin-bottom: 32px; }
+  .pin-title { font-size: 20px; font-weight: 600; color: #e2e4ea; margin-bottom: 6px; }
+  .pin-sub { font-size: 13px; color: #5a6070; margin-bottom: 36px; }
+  .pin-dots { display: flex; gap: 14px; margin-bottom: 36px; }
+  .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #2e3240; background: transparent; transition: all 0.15s; }
+  .pin-dot.filled { background: #e07b2a; border-color: #e07b2a; }
+  .pin-dot.error { background: #e05a5a; border-color: #e05a5a; animation: shake 0.3s ease; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 280px; }
+  .pin-key { padding: 18px; border-radius: 12px; border: 1px solid #252830; background: #13151a; color: #e2e4ea; font-family: 'DM Sans', sans-serif; font-size: 20px; font-weight: 500; cursor: pointer; transition: all 0.1s; text-align: center; }
+  .pin-key:active { background: #21252e; transform: scale(0.95); }
+  .pin-key.del { color: #5a6070; font-size: 16px; }
+  .pin-error-msg { font-size: 12px; color: #e05a5a; margin-top: 16px; height: 16px; }
+
+  :root {
+    --bg: #0a0b0d;
+    --surface: #13151a;
+    --surface2: #1a1d24;
+    --surface3: #21252e;
+    --border: #252830;
+    --border2: #2e3240;
+    --text: #e2e4ea;
+    --text2: #9ba3b8;
+    --muted: #5a6070;
+    --dim: #2e3240;
+    --accent: #e07b2a;
+    --accent2: #4a9eff;
+    --green: #3dba7a;
+    --purple: #8b7cf8;
+    --red: #e05a5a;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+
+  /* VIEWS */
+  .view { display: none; min-height: 100vh; }
+  .view.active { display: flex; flex-direction: column; }
+
+  /* HEADER */
+  .app-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,11,13,0.93);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    padding: env(safe-area-inset-top,0) 0 0;
+  }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px 11px; }
+  .header-logo { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  .header-right { text-align: right; }
+  .header-title { font-size: 13px; font-weight: 500; }
+  .header-sub { font-family: 'DM Mono', monospace; font-size: 9.5px; color: var(--muted); letter-spacing: 0.06em; margin-top: 1px; }
+
+  /* WEEK TABS */
+  .week-tabs { display: flex; overflow-x: auto; scrollbar-width: none; padding: 0 16px 11px; gap: 6px; }
+  .week-tabs::-webkit-scrollbar { display: none; }
+  .week-tab { flex-shrink: 0; padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .week-tab.active { background: var(--accent); border-color: var(--accent); color: #0a0b0d; font-weight: 500; }
+
+  /* CONTENT */
+  .content { flex: 1; padding: 16px; padding-bottom: calc(env(safe-area-inset-bottom,0px) + 80px); overflow-y: auto; }
+
+  /* PLAN VIEW */
+  .plan-week { display: none; }
+  .plan-week.active { display: block; }
+
+  .week-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .week-name { font-size: 18px; font-weight: 600; }
+  .week-badge { font-family: 'DM Mono', monospace; font-size: 10px; padding: 3px 9px; border-radius: 20px; }
+  .badge-launch  { background: #0a2a1a; color: #4ade80; border: 1px solid #1a6640; }
+  .badge-standard{ background: var(--surface2); color: var(--muted); border: 1px solid var(--border2); }
+  .badge-prep    { background: #1f1208; color: #fb923c; border: 1px solid #a05e14; }
+  .badge-final   { background: #170f2a; color: #a78bfa; border: 1px solid #5a4490; }
+  .badge-clean   { background: #141310; color: #9ca3af; border: 1px solid #4a4840; }
+  .badge-peer    { background: #1a0810; color: #f472b6; border: 1px solid #7a2548; }
+
+  .day-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
+  .day-card-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; cursor: pointer; user-select: none; }
+  .day-card-header:active { background: var(--surface2); }
+  .day-name-row { display: flex; align-items: baseline; gap: 8px; }
+  .day-name { font-size: 14px; font-weight: 600; }
+  .day-hours-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+  .day-chevron { font-size: 10px; color: var(--muted); transition: transform 0.2s; }
+  .day-card.open .day-chevron { transform: rotate(180deg); }
+  .day-body { display: none; padding: 0 10px 10px; }
+  .day-card.open .day-body { display: block; }
+
+  /* TIMELINE */
+  .t-row { display: flex; margin-bottom: 3px; }
+  .t-time { width: 62px; min-width: 62px; font-family: 'DM Mono', monospace; font-size: 9px; color: var(--muted); padding: 5px 8px 5px 0; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; }
+  .t-block { flex: 1; border-radius: 5px; padding: 4px 8px; line-height: 1.4; }
+  .t-title { font-size: 10.5px; font-weight: 500; }
+  .t-sub { font-size: 9.5px; opacity: 0.65; margin-top: 1px; }
+  .t-divider { border: none; border-top: 1px dashed var(--border2); margin: 5px 0 5px 62px; }
+  .t-split { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--dim); margin: 3px 0 3px 62px; font-style: italic; }
+
+  .t-coaching { background: #0c1e38; color: #60a5fa; border-left: 2px solid #2563c4; }
+  .t-buffer   { background: #181610; color: #a8a090; border-left: 2px solid #3d3a2e; }
+  .t-break    { background: #111810; color: #86a880; border-left: 2px solid #2d3d2a; font-style: italic; }
+  .t-admin    { background: var(--surface2); color: var(--text2); border-left: 2px solid var(--border2); }
+  .t-prog     { background: #1a1005; color: #fb923c; border-left: 2px solid #7a4a10; }
+  .t-meeting  { background: #130e22; color: #a78bfa; border-left: 2px solid #3d2f6b; }
+  .t-contact  { background: #1a0c08; color: #fca5a5; border-left: 2px solid #6b2a1a; }
+  .t-report   { background: #1a0e08; color: #fdba74; border-left: 2px solid #6b3520; }
+  .t-social   { background: #081a0f; color: #4ade80; border-left: 2px solid #1a4d35; }
+  .t-canva    { background: #0e0a1f; color: #a78bfa; border-left: 2px solid #3d2f6b; }
+  .t-th       { background: #150e04; color: #fbbf24; border-left: 2px solid #5a3a0a; }
+  .t-email    { background: #051510; color: #6ee7b7; border-left: 2px solid #0f3d2a; }
+  .t-clean    { background: #121110; color: #9ca3af; border-left: 2px solid #3a3830; }
+  .t-peer     { background: #160810; color: #f472b6; border-left: 2px solid #5a1a35; }
+  .t-handover { background: #051a10; color: #34d399; border-left: 2px solid #0f4a30; font-weight: 500; }
+  .t-cpd      { background: #0a1a0a; color: #86efac; border-left: 2px solid #166534; }
+  .t-appt     { background: #1a1505; color: #fde68a; border-left: 2px solid #7a6010; }
+
+  .day-summary { margin-top: 8px; margin-left: 62px; padding: 7px 10px; background: var(--surface2); border-radius: 7px; border: 1px solid var(--border2); font-size: 10.5px; color: var(--muted); line-height: 1.7; }
+  .day-summary strong { color: var(--accent); font-weight: 500; }
+
+  .week-note { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; font-size: 11px; color: var(--muted); line-height: 1.7; margin-bottom: 8px; }
+  .week-note strong { color: var(--text); }
+
+  /* GENERATING STATE */
+  .generating { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; gap: 16px; }
+  .generating-spinner { width: 32px; height: 32px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .generating-text { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); text-align: center; }
+
+  /* ERROR */
+  .error-box { background: #1a0808; border: 1px solid #6b1a1a; border-radius: var(--radius); padding: 14px; font-size: 11.5px; color: #fca5a5; line-height: 1.6; margin-bottom: 12px; }
+
+  /* ===== INPUT VIEW ===== */
+  .input-content { flex: 1; padding: 16px; padding-bottom: calc(env(safe-area-inset-bottom,0px) + 20px); overflow-y: auto; }
+
+  .input-section { margin-bottom: 20px; }
+  .input-section-title { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* Week selector */
+  .week-selector { display: flex; gap: 6px; flex-wrap: wrap; }
+  .week-btn { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--text2); font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .week-btn.selected { background: var(--accent); border-color: var(--accent); color: #0a0b0d; font-weight: 500; }
+
+  /* Day cards in input */
+  .day-input-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
+  .day-input-header { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; cursor: pointer; }
+  .day-input-header:active { background: var(--surface2); }
+  .day-input-name { font-size: 13px; font-weight: 500; }
+  .day-input-right { display: flex; align-items: center; gap: 8px; }
+  .day-hours-display { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--accent); }
+  .day-off-label { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); }
+  .day-input-body { display: none; padding: 0 13px 13px; }
+  .day-input-card.open .day-input-body { display: block; }
+
+  /* Hours row */
+  .hours-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .hours-label { font-size: 11px; color: var(--text2); width: 36px; flex-shrink: 0; }
+  .time-select { background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 7px 10px; flex: 1; min-width: 80px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+  .working-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .toggle-switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--surface3); border-radius: 11px; cursor: pointer; transition: 0.2s; border: 1px solid var(--border2); }
+  .toggle-slider:before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
+  input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+  input:checked + .toggle-slider:before { transform: translateX(18px); background: #0a0b0d; }
+  .toggle-label { font-size: 12px; color: var(--text2); }
+
+  /* Sessions */
+  .sessions-title { font-size: 11px; color: var(--text2); margin-bottom: 8px; font-weight: 500; }
+  .session-list { display: flex; flex-direction: column; gap: 4px; }
+  .session-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--surface2); border-radius: 7px; border: 1px solid var(--border); cursor: pointer; transition: all 0.12s; }
+  .session-item.checked { background: #0c1e38; border-color: #2563c4; }
+  .session-checkbox { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--border2); background: transparent; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.12s; }
+  .session-item.checked .session-checkbox { background: #2563c4; border-color: #2563c4; }
+  .session-checkbox-tick { font-size: 9px; color: white; display: none; }
+  .session-item.checked .session-checkbox-tick { display: block; }
+  .session-info { flex: 1; }
+  .session-time { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); }
+  .session-type { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  /* Floating tasks */
+  .floating-tasks { display: flex; flex-direction: column; gap: 6px; }
+  .float-task { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--surface2); border-radius: 7px; border: 1px solid var(--border); }
+  .float-task-info { flex: 1; }
+  .float-task-name { font-size: 11.5px; font-weight: 500; color: var(--text); }
+  .float-task-desc { font-size: 10px; color: var(--muted); margin-top: 1px; }
+  .float-day-select { background: var(--surface3); border: 1px solid var(--border2); border-radius: 6px; color: var(--text2); font-family: 'DM Mono', monospace; font-size: 11px; padding: 5px 8px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+
+  /* Appointments */
+  .appt-list { display: flex; flex-direction: column; gap: 6px; }
+  .appt-row { display: flex; gap: 6px; align-items: center; }
+  .appt-input { flex: 1; background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 10px; }
+  .appt-input::placeholder { color: var(--muted); }
+  .appt-time-input { width: 80px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 8px 8px; }
+  .appt-day-select { background: var(--surface2); border: 1px solid var(--border2); border-radius: 7px; color: var(--text2); font-family: 'DM Mono', monospace; font-size: 11px; padding: 8px 8px; appearance: none; -webkit-appearance: none; }
+  .appt-remove { width: 28px; height: 28px; border-radius: 50%; background: var(--surface3); border: 1px solid var(--border2); color: var(--muted); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .add-appt-btn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: transparent; border: 1px dashed var(--border2); border-radius: 7px; color: var(--muted); font-size: 12px; cursor: pointer; width: 100%; justify-content: center; transition: all 0.15s; }
+  .add-appt-btn:active { background: var(--surface2); }
+
+  /* Generate button */
+  .generate-btn { width: 100%; padding: 15px; background: var(--accent); border: none; border-radius: var(--radius); color: #0a0b0d; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: 0.02em; transition: opacity 0.15s; margin-top: 8px; }
+  .generate-btn:active { opacity: 0.85; }
+  .generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* BOTTOM NAV */
+  .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(10,11,13,0.95); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--border); display: flex; padding-bottom: env(safe-area-inset-bottom, 0); z-index: 200; }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0 12px; cursor: pointer; border: none; background: transparent; color: var(--muted); transition: color 0.15s; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-icon { font-size: 18px; }
+  .nav-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 0.06em; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  select option { background: #1a1d24; }
+</style>
+</head>
+<body>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div class="pin-logo">Three State</div>
+  <div class="pin-title">Welcome back, MH</div>
+  <div class="pin-sub">Enter your PIN to continue</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-key" onclick="pinPress('1')">1</button>
+    <button class="pin-key" onclick="pinPress('2')">2</button>
+    <button class="pin-key" onclick="pinPress('3')">3</button>
+    <button class="pin-key" onclick="pinPress('4')">4</button>
+    <button class="pin-key" onclick="pinPress('5')">5</button>
+    <button class="pin-key" onclick="pinPress('6')">6</button>
+    <button class="pin-key" onclick="pinPress('7')">7</button>
+    <button class="pin-key" onclick="pinPress('8')">8</button>
+    <button class="pin-key" onclick="pinPress('9')">9</button>
+    <button class="pin-key" style="visibility:hidden"></button>
+    <button class="pin-key" onclick="pinPress('0')">0</button>
+    <button class="pin-key del" onclick="pinDelete()">⌫</button>
+  </div>
+  <div class="pin-error-msg" id="pin-error"></div>
+</div>
+
+<!-- ===== PLAN VIEW ===== -->
+<div class="view active" id="view-plan">
+  <div class="app-header">
+    <div class="header-inner">
+      <span class="header-logo">Three State</span>
+      <div class="header-right">
+        <div class="header-title">Week Planner</div>
+        <div class="header-sub" id="plan-header-sub">MH · 6-Week Cycle</div>
+      </div>
+    </div>
+    <div class="week-tabs" id="plan-week-tabs"></div>
+  </div>
+  <div class="content" id="plan-content">
+    <div style="text-align:center;padding:60px 20px;">
+      <div style="font-size:32px;margin-bottom:12px;">📋</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:6px;">No plans yet</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;">Tap <strong style="color:var(--accent)">Plan</strong> below to set up your week and generate your schedule.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== INPUT VIEW ===== -->
+<div class="view" id="view-input">
+  <div class="app-header">
+    <div class="header-inner">
+      <span class="header-logo">Three State</span>
+      <div class="header-right">
+        <div class="header-title">Plan My Week</div>
+        <div class="header-sub">Set up your schedule</div>
+      </div>
+    </div>
+  </div>
+  <div class="input-content">
+
+    <!-- Week selector -->
+    <div class="input-section">
+      <div class="input-section-title">Block Week</div>
+      <div class="week-selector" id="week-selector">
+        <button class="week-btn" onclick="selectWeek(1)">Wk 1</button>
+        <button class="week-btn" onclick="selectWeek(2)">Wk 2</button>
+        <button class="week-btn" onclick="selectWeek(3)">Wk 3</button>
+        <button class="week-btn" onclick="selectWeek(4)">Wk 4</button>
+        <button class="week-btn" onclick="selectWeek(5)">Wk 5</button>
+        <button class="week-btn" onclick="selectWeek(6)">Wk 6</button>
+      </div>
+    </div>
+
+    <!-- Day cards -->
+    <div class="input-section">
+      <div class="input-section-title">Hours + Sessions</div>
+      <div id="day-cards-container"></div>
+    </div>
+
+    <!-- Floating tasks -->
+    <div class="input-section" id="floating-tasks-section">
+      <div class="input-section-title">Block Tasks — Assign to a Day</div>
+      <div class="floating-tasks" id="floating-tasks-list"></div>
+    </div>
+
+    <!-- Appointments -->
+    <div class="input-section">
+      <div class="input-section-title">One-off Appointments</div>
+      <div class="appt-list" id="appt-list"></div>
+      <button class="add-appt-btn" onclick="addAppointment()">+ Add appointment</button>
+    </div>
+
+    <!-- Notes -->
+    <div class="input-section">
+      <div class="input-section-title">Any other notes for this week?</div>
+      <textarea id="extra-notes" class="appt-input" rows="3" placeholder="e.g. new starter assessment Tuesday, JP away this week..." style="width:100%;resize:none;"></textarea>
+    </div>
+
+    <button class="generate-btn" id="generate-btn" onclick="generatePlan()">Generate My Week →</button>
+    <div style="height:20px;"></div>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <button class="nav-btn active" id="nav-plan" onclick="switchView('plan')">
+    <span class="nav-icon">📅</span>
+    <span class="nav-label">My Week</span>
+  </button>
+  <button class="nav-btn" id="nav-input" onclick="switchView('input')">
+    <span class="nav-icon">✏️</span>
+    <span class="nav-label">Plan</span>
+  </button>
+</div>
+
+<script>
+// ===================== DATA =====================
+
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+
+const SESSION_TIMETABLE = {
+  Monday:    ['6:00am PT','7:00am TS','8:15am PT','9:30am PT','12:00pm PT','5:30pm PT','6:30pm PT'],
+  Tuesday:   ['6:00am TF','7:00am PT','9:30am TS','12:00pm TS','5:30pm PT','6:30pm PT'],
+  Wednesday: ['6:00am PT','7:00am TS','9:30am PT','12:00pm PT','5:30pm TF','6:30pm PT'],
+  Thursday:  ['7:00am PT','9:30am PT','12:00pm TF','5:30pm TS','6:30pm PT','7:30pm PT'],
+  Friday:    ['6:00am PT','7:00am PT','9:30am TS','12:00pm PT','5:30pm PT']
+};
+
+const FIXED_TASKS = {
+  Monday:    ['Staff CPD (10:30am)'],
+  Tuesday:   ['Mentee cohort report'],
+  Wednesday: ['Member meeting (10:30am, min 1hr)','Mentee contact messages (post-meeting)'],
+  Thursday:  [],
+  Friday:    ['Canva TV templates update','Team lunch (1pm)']
+};
+
+const WEEK_TASKS = {
+  1: { badges: ['Block Launch'], notes: 'First week of new block. CPD on Monday covers new program walkthrough.' },
+  2: { badges: ['Standard','Deep Clean'], floating: [{ name: 'Deep clean', desc: '45–60 mins · gym floor + cubby', color: 'clean' }] },
+  3: { badges: ['Standard','Peer Reviews'], floating: [{ name: 'Peer reviews (MH, JS, AC)', desc: 'During PT · needs 3rd coach free on rota', color: 'peer' }] },
+  4: { badges: ['Program Drafting'], notes: 'Program draft starts this week. Target sign-off by Friday.' },
+  5: { badges: ['Polish + Upload'], notes: 'Program final polish Monday. Train Heroic upload Tuesday after mentee report.' },
+  6: { badges: ['Close Out'], notes: 'Draft member email Tuesday. Send Thursday. Coach walkthrough Friday.' }
+};
+
+const WEEK_EXTRA_TASKS = {
+  5: { Tuesday: ['Train Heroic upload + add videos'] },
+  6: { Tuesday: ['Draft member program email'], Thursday: ['Finalise + send member email'], Friday: ['New program walkthrough with coaches'] }
+};
+
+const TIME_OPTIONS = [
+  '5:30am','5:45am','6:00am','6:30am','7:00am','7:30am','8:00am','8:30am','9:00am','9:30am',
+  '10:00am','10:30am','11:00am','11:30am','12:00pm','12:30pm','1:00pm','1:30pm','2:00pm',
+  '2:30pm','3:00pm','3:30pm','4:00pm','4:30pm','5:00pm','5:30pm','6:00pm','6:30pm',
+  '7:00pm','7:30pm','8:00pm','8:30pm'
+];
+
+const DEFAULT_HOURS = {
+  Monday:    { start: '6:00am', end: '2:30pm', working: true, split: false, start2: '5:30pm', end2: '7:30pm' },
+  Tuesday:   { start: '6:00am', end: '1:00pm', working: true, split: false, start2: '5:30pm', end2: '7:30pm' },
+  Wednesday: { start: '6:00am', end: '1:30pm', working: true, split: true,  start2: '5:30pm', end2: '7:30pm' },
+  Thursday:  { start: '7:00am', end: '2:00pm', working: true, split: false, start2: '5:30pm', end2: '8:00pm' },
+  Friday:    { start: '6:00am', end: '1:30pm', working: true, split: false, start2: '5:30pm', end2: '7:30pm' }
+};
+
+// State
+let state = {
+  weekNum: null,
+  days: JSON.parse(JSON.stringify(DEFAULT_HOURS)),
+  sessions: { Monday:[], Tuesday:[], Wednesday:[], Thursday:[], Friday:[] },
+  floatingAssignments: {},
+  appointments: [],
+  plans: {}
+};
+
+// ===================== VIEW SWITCHING =====================
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + v).classList.add('active');
+  document.getElementById('nav-' + v).classList.add('active');
+}
+
+// ===================== WEEK SELECTION =====================
+function selectWeek(n) {
+  state.weekNum = n;
+  document.querySelectorAll('.week-btn').forEach((b,i) => b.classList.toggle('selected', i === n-1));
+  buildFloatingTasks();
+}
+
+// ===================== DAY CARDS =====================
+function getHoursDisplay(d) {
+  if (!d.working) return '';
+  if (d.split) return d.start + ' – ' + d.end + ' · ' + d.start2 + ' – ' + d.end2;
+  return d.start + ' – ' + d.end;
+}
+
+function buildDayCards() {
+  const container = document.getElementById('day-cards-container');
+  container.innerHTML = '';
+  DAYS.forEach(day => {
+    const d = state.days[day];
+    const card = document.createElement('div');
+    card.className = 'day-input-card';
+    card.id = 'day-card-' + day;
+
+    const sessions = SESSION_TIMETABLE[day].map(s => {
+      const checked = state.sessions[day].includes(s) ? 'checked' : '';
+      return `<div class="session-item ${checked ? 'checked':''}" onclick="toggleSession('${day}','${s}',this)">
+        <div class="session-checkbox"><span class="session-checkbox-tick">✓</span></div>
+        <div class="session-info">
+          <div class="session-time">${s.split(' ')[0]}</div>
+          <div class="session-type">${s.split(' ').slice(1).join(' ')}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    card.innerHTML = `
+      <div class="day-input-header" onclick="toggleDayInput('${day}')">
+        <span class="day-input-name">${day}</span>
+        <div class="day-input-right">
+          <span class="day-hours-display" id="hours-display-${day}">${d.working ? getHoursDisplay(d) : ''}</span>
+          <span class="day-off-label" id="off-label-${day}">${!d.working ? 'Off' : ''}</span>
+          <span class="day-chevron" id="chevron-${day}">▼</span>
+        </div>
+      </div>
+      <div class="day-input-body" id="body-${day}">
+        <div class="working-toggle">
+          <label class="toggle-switch">
+            <input type="checkbox" ${d.working ? 'checked' : ''} onchange="toggleWorking('${day}',this)">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Working this day</span>
+        </div>
+        <div id="hours-section-${day}" style="${!d.working ? 'display:none' : ''}">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500;">Morning / Main Shift</div>
+          <div class="hours-row">
+            <span class="hours-label" style="font-size:11px;color:var(--text2)">Start</span>
+            <select class="time-select" onchange="updateHours('${day}','start',this.value)">${TIME_OPTIONS.map(t=>`<option value="${t}" ${t===d.start?'selected':''}>${t}</option>`).join('')}</select>
+          </div>
+          <div class="hours-row">
+            <span class="hours-label" style="font-size:11px;color:var(--text2)">End</span>
+            <select class="time-select" onchange="updateHours('${day}','end',this.value)">${TIME_OPTIONS.map(t=>`<option value="${t}" ${t===d.end?'selected':''}>${t}</option>`).join('')}</select>
+          </div>
+          <div class="working-toggle" style="margin-top:10px;margin-bottom:8px;">
+            <label class="toggle-switch">
+              <input type="checkbox" id="split-toggle-${day}" ${d.split ? 'checked' : ''} onchange="toggleSplit('${day}',this)">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Split shift (evening block)</span>
+          </div>
+          <div id="split-section-${day}" style="${!d.split ? 'display:none' : ''}">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:500;">Evening Shift</div>
+            <div class="hours-row">
+              <span class="hours-label" style="font-size:11px;color:var(--text2)">Start</span>
+              <select class="time-select" onchange="updateHours('${day}','start2',this.value)">${TIME_OPTIONS.map(t=>`<option value="${t}" ${t===d.start2?'selected':''}>${t}</option>`).join('')}</select>
+            </div>
+            <div class="hours-row">
+              <span class="hours-label" style="font-size:11px;color:var(--text2)">End</span>
+              <select class="time-select" onchange="updateHours('${day}','end2',this.value)">${TIME_OPTIONS.map(t=>`<option value="${t}" ${t===d.end2?'selected':''}>${t}</option>`).join('')}</select>
+            </div>
+          </div>
+          <div class="sessions-title" style="margin-top:12px;">Sessions I'm taking</div>
+          <div class="session-list">${sessions}</div>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function toggleDayInput(day) {
+  const card = document.getElementById('day-card-' + day);
+  const body = document.getElementById('body-' + day);
+  const chevron = document.getElementById('chevron-' + day);
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  chevron.textContent = open ? '▼' : '▲';
+}
+
+function toggleWorking(day, checkbox) {
+  state.days[day].working = checkbox.checked;
+  document.getElementById('hours-section-' + day).style.display = checkbox.checked ? 'block' : 'none';
+  document.getElementById('hours-display-' + day).textContent = checkbox.checked ? getHoursDisplay(state.days[day]) : '';
+  document.getElementById('off-label-' + day).textContent = !checkbox.checked ? 'Off' : '';
+  buildFloatingTasks();
+}
+
+function toggleSplit(day, checkbox) {
+  state.days[day].split = checkbox.checked;
+  document.getElementById('split-section-' + day).style.display = checkbox.checked ? 'block' : 'none';
+  document.getElementById('hours-display-' + day).textContent = getHoursDisplay(state.days[day]);
+}
+
+function updateHours(day, field, val) {
+  state.days[day][field] = val;
+  document.getElementById('hours-display-' + day).textContent = getHoursDisplay(state.days[day]);
+}
+
+function toggleSession(day, session, el) {
+  el.classList.toggle('checked');
+  if (el.classList.contains('checked')) {
+    if (!state.sessions[day].includes(session)) state.sessions[day].push(session);
+  } else {
+    state.sessions[day] = state.sessions[day].filter(s => s !== session);
+  }
+}
+
+// ===================== FLOATING TASKS =====================
+function buildFloatingTasks() {
+  const section = document.getElementById('floating-tasks-section');
+  const list = document.getElementById('floating-tasks-list');
+  const wn = state.weekNum;
+  const floaters = wn && WEEK_TASKS[wn]?.floating;
+  if (!floaters || floaters.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  const workingDays = DAYS.filter(d => state.days[d].working);
+  list.innerHTML = floaters.map((t,i) => `
+    <div class="float-task">
+      <div class="float-task-info">
+        <div class="float-task-name">${t.name}</div>
+        <div class="float-task-desc">${t.desc}</div>
+      </div>
+      <select class="float-day-select" onchange="state.floatingAssignments['${t.name}']=this.value">
+        <option value="">Assign day</option>
+        ${workingDays.map(d=>`<option value="${d}" ${state.floatingAssignments[t.name]===d?'selected':''}>${d.slice(0,3)}</option>`).join('')}
+      </select>
+    </div>`).join('');
+}
+
+// ===================== APPOINTMENTS =====================
+let apptCount = 0;
+function addAppointment() {
+  const id = ++apptCount;
+  const list = document.getElementById('appt-list');
+  const workingDays = DAYS.filter(d => state.days[d].working);
+  const row = document.createElement('div');
+  row.className = 'appt-row';
+  row.id = 'appt-' + id;
+  row.innerHTML = `
+    <select class="appt-day-select" id="appt-day-${id}">
+      ${workingDays.map(d=>`<option value="${d}">${d.slice(0,3)}</option>`).join('')}
+    </select>
+    <input class="appt-time-input" type="text" placeholder="9:30am" id="appt-time-${id}">
+    <input class="appt-input" type="text" placeholder="e.g. New starter assessment" id="appt-desc-${id}">
+    <button class="appt-remove" onclick="removeAppt(${id})">×</button>`;
+  list.appendChild(row);
+}
+function removeAppt(id) {
+  document.getElementById('appt-' + id)?.remove();
+}
+function getAppointments() {
+  const rows = document.querySelectorAll('.appt-row');
+  const result = [];
+  rows.forEach(row => {
+    const id = row.id.replace('appt-','');
+    const day = document.getElementById('appt-day-'+id)?.value;
+    const time = document.getElementById('appt-time-'+id)?.value;
+    const desc = document.getElementById('appt-desc-'+id)?.value;
+    if (day && desc) result.push({ day, time, desc });
+  });
+  return result;
+}
+
+// ===================== GENERATE =====================
+async function generatePlan() {
+  if (!state.weekNum) { alert('Please select a block week first.'); return; }
+
+  const appointments = getAppointments();
+  const notes = document.getElementById('extra-notes').value;
+  const wn = state.weekNum;
+
+  // Build prompt
+  const wt = WEEK_TASKS[wn];
+  const weekExtra = WEEK_EXTRA_TASKS[wn] || {};
+
+  let prompt = `You are a scheduling assistant for Mark (MH), a strength and conditioning coach at Three State gym in Dublin, Ireland.
+
+Generate a detailed day-by-day schedule for Week ${wn} of a 6-week programming block.
+
+CONTEXT:
+- Mark's role: Primarily operations/systems/admin. He is 2nd or 3rd choice for sessions. He coaches when assigned HC or only coach available.
+- Session types: PT (Personal Training, 1hr), TS (Three Sweat, 1hr), TF (Three Flow, 45min)
+- Pre-session prep: 15 mins before sessions he's taking. Post-session: 15 mins after (notes + tidy).
+- Back-to-back sessions: one shared pre-session prep block only.
+- Breaks: 30 mins. 1 break per shift block. For split shifts, 1 break in the morning block if long enough, 1 in the evening block if long enough. For a single long shift (8+ hrs) give 2 breaks. Breaks go in natural mid-shift gaps (not during sessions). For split shifts, the gap between morning and evening is OFF time — show a divider block.
+- Sessions NOT ticked = admin time for Mark.
+- Week ${wn} context: ${wt.notes || wt.badges?.join(', ')}
+
+FIXED WEEKLY TASKS (auto-populate):
+- Monday: Staff CPD at 10:30am (30 mins)
+- Tuesday: Mentee cohort report (fits in admin block after morning sessions)
+- Wednesday: Member meeting 10:30am (min 1 hour), then mentee contact messages (~20 mins) immediately after
+- Friday: Canva TV templates update (~15 mins before team lunch), Team lunch 1pm
+
+${Object.keys(weekExtra).length > 0 ? `WEEK ${wn} SPECIFIC TASKS:\n${Object.entries(weekExtra).map(([d,tasks])=>`- ${d}: ${tasks.join(', ')}`).join('\n')}` : ''}
+
+${Object.values(state.floatingAssignments).some(v=>v) ? `FLOATING TASKS ASSIGNED:\n${Object.entries(state.floatingAssignments).filter(([,v])=>v).map(([name,day])=>`- ${name} on ${day}`).join('\n')}` : ''}
+
+MARK'S HOURS AND SESSIONS THIS WEEK:
+${DAYS.filter(d => state.days[d].working).map(day => {
+  const d = state.days[day];
+  const sessions = state.sessions[day];
+  const fixedTasks = FIXED_TASKS[day] || [];
+  const extraTasks = weekExtra[day] || [];
+  const appts = appointments.filter(a => a.day === day);
+  const hoursStr = d.split
+    ? `${d.start} – ${d.end} (morning), then OFF, then ${d.start2} – ${d.end2} (evening) — SPLIT SHIFT`
+    : `${d.start} – ${d.end}`;
+  return `${day}: ${hoursStr}
+  Sessions taking: ${sessions.length > 0 ? sessions.join(', ') : 'None assigned'}
+  Fixed tasks: ${[...fixedTasks,...extraTasks].join(', ') || 'Standard'}
+  ${appts.length > 0 ? 'Appointments: ' + appts.map(a=>`${a.time} ${a.desc}`).join(', ') : ''}`;
+}).join('\n\n')}
+
+${DAYS.filter(d => !state.days[d].working).length > 0 ? `DAYS OFF: ${DAYS.filter(d => !state.days[d].working).join(', ')}` : ''}
+
+${notes ? `ADDITIONAL NOTES: ${notes}` : ''}
+
+OUTPUT FORMAT — return ONLY valid JSON, no markdown, no explanation:
+{
+  "weeks": [
+    {
+      "weekNum": ${wn},
+      "badges": ${JSON.stringify(wt.badges || [])},
+      "weekNote": "optional brief note about this week",
+      "days": [
+        {
+          "name": "Monday",
+          "hours": "6am – 2:30pm",
+          "blocks": [
+            { "time": "5:45am", "type": "buffer", "title": "Pre-session prep", "sub": "Plan 6am PT" },
+            { "time": "6:00am", "type": "coaching", "title": "PT Session", "sub": "6:00 – 7:00am" }
+          ],
+          "summary": "Key task: ... · Admin time: X hrs"
+        }
+      ]
+    }
+  ]
+}
+
+Block types: coaching, buffer, break, admin, prog, meeting, contact, report, social, canva, th, email, clean, peer, handover, cpd, appt
+
+Rules:
+- Only include days Mark is working
+- Place breaks in natural mid-shift gaps
+- Wednesday always gets 2 breaks
+- Keep summaries short and useful — mention key tasks and total admin/programming time
+- For split shifts (Wednesday often has one) include a divider object: { "type": "divider", "label": "Off 11:30am – 5:30pm" }
+- Be precise with times
+- If a session is TF (Three Flow), duration is 45 mins, so there IS a 15-min gap after before the next session`;
+
+  // Show generating state
+  switchView('plan');
+  const planContent = document.getElementById('plan-content');
+  planContent.innerHTML = `<div class="generating"><div class="generating-spinner"></div><div class="generating-text">Building your Week ${wn} plan…</div></div>`;
+  document.getElementById('plan-header-sub').textContent = `Week ${wn} · Generating…`;
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || '';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    renderPlan(parsed);
+  } catch(e) {
+    planContent.innerHTML = `<div class="error-box">⚠️ Couldn't generate plan. Check your internet connection and try again.<br><small style="opacity:0.6;margin-top:4px;display:block">${e.message}</small></div>`;
+    document.getElementById('plan-header-sub').textContent = 'MH · Error';
+  }
+}
+
+// ===================== RENDER PLAN =====================
+function renderPlan(data) {
+  const planContent = document.getElementById('plan-content');
+  const tabsEl = document.getElementById('plan-week-tabs');
+  planContent.innerHTML = '';
+  tabsEl.innerHTML = '';
+
+  // Store
+  data.weeks.forEach(w => { state.plans[w.weekNum] = w; });
+
+  // Build tabs for all stored plans
+  Object.keys(state.plans).sort().forEach(wn => {
+    const btn = document.createElement('button');
+    btn.className = 'week-tab' + (parseInt(wn) === state.weekNum ? ' active' : '');
+    btn.textContent = 'Wk ' + wn;
+    btn.onclick = () => showPlanWeek(parseInt(wn));
+    tabsEl.appendChild(btn);
+  });
+
+  showPlanWeek(state.weekNum);
+  document.getElementById('plan-header-sub').textContent = `MH · Week ${state.weekNum}`;
+}
+
+function showPlanWeek(wn) {
+  document.querySelectorAll('.plan-week').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#plan-week-tabs .week-tab').forEach((b,i) => {
+    b.classList.toggle('active', parseInt(b.textContent.replace('Wk ','')) === wn);
+  });
+
+  const planContent = document.getElementById('plan-content');
+  const existingPanel = document.getElementById('plan-week-' + wn);
+  if (existingPanel) { existingPanel.classList.add('active'); return; }
+
+  const w = state.plans[wn];
+  if (!w) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'plan-week active';
+  panel.id = 'plan-week-' + wn;
+
+  const BADGE_CLASS = { 'Block Launch':'badge-launch','Standard':'badge-standard','Program Drafting':'badge-prep','Polish + Upload':'badge-prep','Close Out':'badge-final','Deep Clean':'badge-clean','Peer Reviews':'badge-peer' };
+
+  let html = `<div class="week-meta"><span class="week-name">Week ${wn}</span>${(w.badges||[]).map(b=>`<span class="week-badge ${BADGE_CLASS[b]||'badge-standard'}">${b}</span>`).join('')}</div>`;
+
+  if (w.weekNote) html += `<div class="week-note">${w.weekNote}</div>`;
+
+  w.days.forEach((day, idx) => {
+    const blocksHtml = (day.blocks||[]).map(b => {
+      if (b.type === 'divider') return `<hr class="t-divider"><div class="t-split">${b.label||''}</div>`;
+      return `<div class="t-row">
+        <div class="t-time">${b.time||''}</div>
+        <div class="t-block t-${b.type}">
+          <div class="t-title">${b.title}</div>
+          ${b.sub ? `<div class="t-sub">${b.sub}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const summaryHtml = day.summary ? `<div class="day-summary"><strong>↗</strong> ${day.summary}</div>` : '';
+
+    html += `<div class="day-card ${idx===0?'open':''}" id="pday-${wn}-${day.name}">
+      <div class="day-card-header" onclick="togglePlanDay('${wn}','${day.name}')">
+        <div class="day-name-row"><span class="day-name">${day.name}</span><span class="day-hours-label">${day.hours||''}</span></div>
+        <span class="day-chevron" id="pchevron-${wn}-${day.name}">${idx===0?'▲':'▼'}</span>
+      </div>
+      <div class="day-body">${blocksHtml}${summaryHtml}</div>
+    </div>`;
+  });
+
+  panel.innerHTML = html;
+  planContent.appendChild(panel);
+}
+
+function togglePlanDay(wn, dayName) {
+  const card = document.getElementById(`pday-${wn}-${dayName}`);
+  const chevron = document.getElementById(`pchevron-${wn}-${dayName}`);
+  card.classList.toggle('open');
+  chevron.textContent = card.classList.contains('open') ? '▲' : '▼';
+}
+
+// ===================== PIN =====================
+const CORRECT_PIN = '3333';
+let pinEntry = '';
+
+function pinPress(digit) {
+  if (pinEntry.length >= 4) return;
+  pinEntry += digit;
+  updatePinDots();
+  if (pinEntry.length === 4) {
+    setTimeout(() => {
+      if (pinEntry === CORRECT_PIN) {
+        document.getElementById('pin-screen').classList.add('hidden');
+        sessionStorage.setItem('ts_auth', '1');
+      } else {
+        document.querySelectorAll('.pin-dot').forEach(d => { d.classList.remove('filled'); d.classList.add('error'); });
+        document.getElementById('pin-error').textContent = 'Incorrect PIN';
+        setTimeout(() => {
+          pinEntry = '';
+          updatePinDots();
+          document.querySelectorAll('.pin-dot').forEach(d => d.classList.remove('error'));
+          document.getElementById('pin-error').textContent = '';
+        }, 800);
+      }
+    }, 100);
+  }
+}
+
+function pinDelete() {
+  pinEntry = pinEntry.slice(0, -1);
+  updatePinDots();
+}
+
+function updatePinDots() {
+  for (let i = 0; i < 4; i++) {
+    const dot = document.getElementById('pd' + i);
+    dot.classList.toggle('filled', i < pinEntry.length);
+  }
+}
+
+if (sessionStorage.getItem('ts_auth') === '1') {
+  document.getElementById('pin-screen').classList.add('hidden');
+}
+
+// ===================== INIT =====================
+buildDayCards();
+</script>
+</body>
+</html>
